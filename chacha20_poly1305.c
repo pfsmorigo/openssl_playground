@@ -3,9 +3,6 @@
 #include <openssl/err.h>
 #include <string.h>
 
-typedef unsigned char byte;
-typedef std::basic_string<char, std::char_traits<char>, zallocator<char> > secure_string;
-
 uint8_t data[] = {
 	0x4c, 0x61, 0x64, 0x69, 0x65, 0x73, 0x20, 0x61, 0x6e, 0x64, 0x20, 0x47, 0x65, 0x6e, 0x74, 0x6c,
 	0x65, 0x6d, 0x65, 0x6e, 0x20, 0x6f, 0x66, 0x20, 0x74, 0x68, 0x65, 0x20, 0x63, 0x6c, 0x61, 0x73,
@@ -35,26 +32,20 @@ uint8_t tag[] = {
 	0x1a, 0xe1, 0x0b, 0x59, 0x4f, 0x09, 0xe2, 0x6a, 0x7e, 0x90, 0x2e, 0xcb, 0xd0, 0x60, 0x06, 0x91
 };
 
-int main(int argc, char* argv[])
-{
-    // Load the necessary cipher
-    EVP_add_cipher(EVP_aes_256_cbc());
+int main() {
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	int outlen;
 
-    // plaintext, ciphertext, recovered text
-    secure_string ptext = "Yoda said, Do or do not. There is no try.";
-    secure_string ctext, rtext;
+	uint8_t out[4096];
+	uint8_t tagout[12];
 
-    byte key[KEY_SIZE], iv[BLOCK_SIZE];
-    gen_params(key, iv);
+	EVP_EncryptInit_ex(ctx, EVP_chacha20_poly1305(), 0, 0, 0);
+	EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, 12, 0);
+	EVP_EncryptInit_ex(ctx, NULL, NULL, key, nonce);
+	EVP_EncryptUpdate(ctx, NULL, &outlen, aad, sizeof(aad));
+	EVP_EncryptUpdate(ctx, out, &outlen, data, sizeof(data));
+	EVP_EncryptFinal_ex(ctx, out, &outlen);
+	EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 12, tagout);
 
-    aes_encrypt(key, iv, ptext, ctext);
-    aes_decrypt(key, iv, ctext, rtext);
-
-    OPENSSL_cleanse(key, KEY_SIZE);
-    OPENSSL_cleanse(iv, BLOCK_SIZE);
-
-    std::cout << "Original message:\n" << ptext << std::endl;
-    std::cout << "Recovered message:\n" << rtext << std::endl;
-
-    return 0;
+	return memcmp(tag, tagout, 12);
 }
